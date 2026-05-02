@@ -1,6 +1,3 @@
-// src/shopee.js
-// Busca imagem e preços do produto via API da Shopee
-
 const axios = require('axios');
 const crypto = require('crypto');
 
@@ -10,44 +7,55 @@ class ShopeeAPI {
     this.secret = process.env.SHOPEE_SECRET;
   }
 
-  // Busca dados do produto pelo Item ID (API pública)
-  async getProductData(itemId) {
+  _extractIds(productLink) {
     try {
-      // Extrai shopId e itemId do product link se possível
-      // formato: shopee.com.br/product/{shopId}/{itemId}
-      const url = `https://shopee.com.br/api/v4/item/get?itemid=${itemId}&shopid=0`;
-      const res = await axios.get(url, {
-        timeout: 10000,
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36',
-          'Referer':    'https://shopee.com.br/',
-          'Accept':     'application/json',
-          'X-API-SOURCE': 'pc',
-        }
-      });
-
-      const data = res.data?.data;
-      if (!data) return null;
-
-      // Imagem
-      const images = data.images || [];
-      const imageUrl = images.length > 0
-        ? `https://cf.shopee.com.br/file/${images[0]}`
-        : null;
-
-      // Preços
-      const priceMin    = data.price_min    ? (data.price_min / 100000).toFixed(2)    : null;
-      const priceMax    = data.price_max    ? (data.price_max / 100000).toFixed(2)    : null;
-      const priceOriginal = data.price      ? (data.price / 100000).toFixed(2)        : null;
-
-      return { imageUrl, priceMin, priceMax, priceOriginal };
-    } catch (err) {
-      console.warn('[Shopee] Erro ao buscar produto:', err.message);
-      return null;
-    }
+      const match = productLink.match(/product\/(\d+)\/(\d+)/);
+      if (match) return { shopId: match[1], itemId: match[2] };
+    } catch(e) {}
+    return null;
   }
 
-  // Gera link de afiliado via API oficial
+  async getProductImage(itemId, productLink) {
+    const ids = this._extractIds(productLink || '');
+    const shopId = ids?.shopId || '0';
+
+    const urls = [
+      `https://shopee.com.br/api/v4/item/get?itemid=${itemId}&shopid=${shopId}`,
+      `https://shopee.com.br/api/v2/item/get?itemid=${itemId}&shopid=${shopId}`,
+    ];
+
+    for (const url of urls) {
+      try {
+        const res = await axios.get(url, {
+          timeout: 8000,
+          headers: {
+            'User-Agent':      'Mozilla/5.0 (Linux; Android 11; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+            'Referer':         'https://shopee.com.br/',
+            'Accept':          'application/json',
+            'Accept-Language': 'pt-BR,pt;q=0.9',
+            'X-API-SOURCE':    'pc',
+            'X-Requested-With': 'XMLHttpRequest',
+          }
+        });
+
+        const data = res.data?.data;
+        if (!data) continue;
+
+        const images = data.images || data.item_basic?.images || [];
+        if (!images.length) continue;
+
+        const imageUrl = `https://cf.shopee.com.br/file/${images[0]}`;
+        console.log('[Shopee] Imagem encontrada:', imageUrl);
+        return imageUrl;
+      } catch(err) {
+        console.warn('[Shopee] Tentativa falhou:', err.message);
+      }
+    }
+
+    console.warn('[Shopee] Imagem não disponível para', itemId);
+    return null;
+  }
+
   async generateAffiliateLink(originalUrl) {
     if (!this.appId || !this.secret) return originalUrl;
     try {
@@ -69,7 +77,7 @@ class ShopeeAPI {
         },
         {
           headers: {
-            'Content-Type': 'application/json',
+            'Content-Type':  'application/json',
             'Authorization': `SHA256 Credential=${this.appId},Timestamp=${timestamp},Signature=${signature}`,
           },
           timeout: 10000,
@@ -79,11 +87,10 @@ class ShopeeAPI {
       const link = res.data?.data?.generateShortLink?.shortLink;
       return link || originalUrl;
     } catch (err) {
-      console.warn('[Shopee] Erro ao gerar link afiliado:', err.message);
+      console.warn('[Shopee] Erro link afiliado:', err.message);
       return originalUrl;
     }
   }
 }
 
 module.exports = { ShopeeAPI };
-
