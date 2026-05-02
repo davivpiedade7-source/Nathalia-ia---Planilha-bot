@@ -1,4 +1,3 @@
-// src/parser.js
 function parseShopeeCSV(text) {
   const lines = text.replace(/^\uFEFF/, '').split('\n').filter(l => l.trim());
   if (lines.length < 2) return [];
@@ -24,13 +23,14 @@ function parseShopeeCSV(text) {
     const row = {};
     headers.forEach((h, i) => { row[h] = (vals[i] || '').replace(/^"|"$/g, '').trim(); });
 
-    const itemId    = row['item id'] || row['item_id'] || '';
-    const name      = row['item name'] || row['item_name'] || '';
-    const price     = row['price'] || '';
-    const offerLink = row['offer link'] || row['offer_link'] || '';
+    const itemId      = row['item id'] || row['item_id'] || '';
+    const name        = row['item name'] || row['item_name'] || '';
+    const price       = row['price'] || '';
+    const productLink = row['product link'] || row['product_link'] || '';
+    const offerLink   = row['offer link'] || row['offer_link'] || '';
 
     if (itemId && name && offerLink) {
-      products.push({ item_id: itemId, name, price, offer_link: offerLink });
+      products.push({ item_id: itemId, name, price, product_link: productLink, offer_link: offerLink });
     }
   });
 
@@ -39,4 +39,3 @@ function parseShopeeCSV(text) {
 }
 
 module.exports = { parseShopeeCSV };
-
