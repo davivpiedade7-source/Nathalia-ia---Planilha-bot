@@ -9,22 +9,31 @@ class ShopeeAPI {
   }
 
   _sign(timestamp) {
+    const payload = `${this.appId}${timestamp}`;
     return crypto
       .createHmac('sha256', this.secret)
-      .update(this.appId + timestamp)
+      .update(payload)
       .digest('hex');
   }
 
   async _query(gql) {
     const timestamp = Math.floor(Date.now() / 1000).toString();
     const signature = this._sign(timestamp);
+
+    // Formato correto exigido pela Shopee
+    const authHeader = `SHA256 Credential=${this.appId},Timestamp=${timestamp},Signature=${signature}`;
+
+    console.log('[Shopee] AppID:', this.appId);
+    console.log('[Shopee] Timestamp:', timestamp);
+    console.log('[Shopee] Auth:', authHeader.substring(0, 60) + '...');
+
     const res = await axios.post(
       this.baseUrl,
       { query: gql },
       {
         headers: {
           'Content-Type':  'application/json',
-          'Authorization': `SHA256 Credential=${this.appId},Timestamp=${timestamp},Signature=${signature}`,
+          'Authorization': authHeader,
         },
         timeout: 10000,
       }
@@ -33,29 +42,22 @@ class ShopeeAPI {
   }
 
   async getProductImage(itemId) {
-    if (!itemId || !this.appId || !this.secret) return null;
+    if (!itemId || !this.appId || !this.secret) {
+      console.warn('[Shopee] Credenciais não configuradas');
+      return null;
+    }
     try {
       const gql = `{
-        productOfferV2(
-          itemId: ${itemId}
-          limit: 1
-        ) {
-          nodes {
-            itemId
-            imageUrl
-            productName
-          }
+        productOfferV2(itemId: ${itemId} limit: 1) {
+          nodes { itemId imageUrl productName }
         }
       }`;
       const data = await this._query(gql);
-      console.log('[Shopee] Resposta completa:', JSON.stringify(data).substring(0, 500));
+      console.log('[Shopee] Resposta:', JSON.stringify(data).substring(0, 300));
       const nodes = data?.data?.productOfferV2?.nodes || [];
-      const imageUrl = nodes[0]?.imageUrl || null;
-      if (imageUrl) console.log('[Shopee] Imagem:', imageUrl);
-      else console.warn('[Shopee] Nenhum node retornado para itemId:', itemId);
-      return imageUrl;
+      return nodes[0]?.imageUrl || null;
     } catch (err) {
-      console.error('[Shopee] Erro completo:', err.response?.data || err.message);
+      console.error('[Shopee] Erro:', err.response?.data ? JSON.stringify(err.response.data) : err.message);
       return null;
     }
   }
@@ -68,16 +70,15 @@ class ShopeeAPI {
           generateShortLink(input: {
             originUrl: "${originalUrl}"
             subIds: ["telegram_bot"]
-          }) {
-            shortLink
-          }
+          }) { shortLink }
         }
       `;
       const data = await this._query(gql);
       const link = data?.data?.generateShortLink?.shortLink;
+      console.log('[Shopee] Link gerado:', link || 'falhou, usando original');
       return link || originalUrl;
     } catch (err) {
-      console.warn('[Shopee] Erro link:', err.message);
+      console.warn('[Shopee] Erro link:', err.response?.data ? JSON.stringify(err.response.data) : err.message);
       return originalUrl;
     }
   }
