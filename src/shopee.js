@@ -3,8 +3,8 @@ const crypto = require('crypto');
 
 class ShopeeAPI {
   constructor() {
-    this.appId  = process.env.SHOPEE_APP_ID;
-    this.secret = process.env.SHOPEE_SECRET;
+    this.appId   = process.env.SHOPEE_APP_ID;
+    this.secret  = process.env.SHOPEE_SECRET;
     this.baseUrl = 'https://open-api.affiliate.shopee.com.br/graphql';
   }
 
@@ -32,7 +32,6 @@ class ShopeeAPI {
     return res.data;
   }
 
-  // Busca imagem do produto pelo itemId via API oficial
   async getProductImage(itemId) {
     if (!itemId || !this.appId || !this.secret) return null;
     try {
@@ -44,22 +43,23 @@ class ShopeeAPI {
           nodes {
             itemId
             imageUrl
+            productName
           }
         }
       }`;
       const data = await this._query(gql);
+      console.log('[Shopee] Resposta completa:', JSON.stringify(data).substring(0, 500));
       const nodes = data?.data?.productOfferV2?.nodes || [];
       const imageUrl = nodes[0]?.imageUrl || null;
-      if (imageUrl) console.log('[Shopee] Imagem encontrada:', imageUrl);
-      else console.warn('[Shopee] Imagem não encontrada para', itemId);
+      if (imageUrl) console.log('[Shopee] Imagem:', imageUrl);
+      else console.warn('[Shopee] Nenhum node retornado para itemId:', itemId);
       return imageUrl;
     } catch (err) {
-      console.error('[Shopee] Erro ao buscar imagem:', err.message);
+      console.error('[Shopee] Erro completo:', err.response?.data || err.message);
       return null;
     }
   }
 
-  // Gera link curto de afiliado
   async generateAffiliateLink(originalUrl) {
     if (!this.appId || !this.secret) return originalUrl;
     try {
@@ -77,7 +77,7 @@ class ShopeeAPI {
       const link = data?.data?.generateShortLink?.shortLink;
       return link || originalUrl;
     } catch (err) {
-      console.warn('[Shopee] Erro link afiliado:', err.message);
+      console.warn('[Shopee] Erro link:', err.message);
       return originalUrl;
     }
   }
