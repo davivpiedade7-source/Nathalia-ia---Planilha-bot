@@ -9,15 +9,12 @@ class ShopeeAPI {
   }
 
   async _query(gql) {
-    // Pega o timestamp atual em milissegundos
-    const timestamp = Date.now().toString();
-
+    const timestamp = Math.floor(Date.now() / 1000).toString();
+    const payload   = this.appId + timestamp;
     const signature = crypto
       .createHmac('sha256', this.secret)
-      .update(this.appId + timestamp)
+      .update(payload)
       .digest('hex');
-
-    console.log('[Shopee] Timestamp ms:', timestamp);
 
     const res = await axios.post(
       this.baseUrl,
@@ -26,9 +23,8 @@ class ShopeeAPI {
         headers: {
           'Content-Type':  'application/json',
           'Authorization': `SHA256 Credential=${this.appId},Timestamp=${timestamp},Signature=${signature}`,
-          'X-Timestamp':   timestamp,
         },
-        timeout: 5000,
+        timeout: 10000,
       }
     );
     return res.data;
@@ -47,7 +43,7 @@ class ShopeeAPI {
       const nodes = data?.data?.productOfferV2?.nodes || [];
       return nodes[0]?.imageUrl || null;
     } catch (err) {
-      console.error('[Shopee] Erro:', err.response?.data ? JSON.stringify(err.response.data) : err.message);
+      console.error('[Shopee] Erro:', err.message);
       return null;
     }
   }
@@ -65,7 +61,6 @@ class ShopeeAPI {
       `;
       const data = await this._query(gql);
       const link = data?.data?.generateShortLink?.shortLink;
-      console.log('[Shopee] Link:', link || 'falhou');
       return link || originalUrl;
     } catch (err) {
       console.warn('[Shopee] Erro link:', err.message);
