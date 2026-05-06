@@ -9,40 +9,29 @@ class ShopeeAPI {
   }
 
   async _query(gql) {
-    // Testa os dois formatos de timestamp
-    const tsSeconds = Math.floor(Date.now() / 1000).toString();
-    const tsMillis  = Date.now().toString();
+    // Pega o timestamp atual em milissegundos
+    const timestamp = Date.now().toString();
 
-    for (const timestamp of [tsSeconds, tsMillis]) {
-      const signature = crypto
-        .createHmac('sha256', this.secret)
-        .update(this.appId + timestamp)
-        .digest('hex');
+    const signature = crypto
+      .createHmac('sha256', this.secret)
+      .update(this.appId + timestamp)
+      .digest('hex');
 
-      try {
-        const res = await axios.post(
-          this.baseUrl,
-          { query: gql },
-          {
-            headers: {
-              'Content-Type':  'application/json',
-              'Authorization': `SHA256 Credential=${this.appId},Timestamp=${timestamp},Signature=${signature}`,
-            },
-            timeout: 10000,
-          }
-        );
+    console.log('[Shopee] Timestamp ms:', timestamp);
 
-        const data = res.data;
-        if (!data.errors) {
-          console.log('[Shopee] Autenticação ok com timestamp:', timestamp.length > 10 ? 'milissegundos' : 'segundos');
-          return data;
-        }
-        console.warn('[Shopee] Erro com timestamp', timestamp.length > 10 ? 'ms' : 's', ':', data.errors[0]?.message);
-      } catch(err) {
-        console.warn('[Shopee] Erro HTTP:', err.message);
+    const res = await axios.post(
+      this.baseUrl,
+      { query: gql },
+      {
+        headers: {
+          'Content-Type':  'application/json',
+          'Authorization': `SHA256 Credential=${this.appId},Timestamp=${timestamp},Signature=${signature}`,
+          'X-Timestamp':   timestamp,
+        },
+        timeout: 5000,
       }
-    }
-    return null;
+    );
+    return res.data;
   }
 
   async getProductImage(itemId) {
@@ -54,12 +43,11 @@ class ShopeeAPI {
         }
       }`;
       const data = await this._query(gql);
-      if (!data) return null;
-      console.log('[Shopee] Resposta imagem:', JSON.stringify(data).substring(0, 200));
+      console.log('[Shopee] Resposta:', JSON.stringify(data).substring(0, 300));
       const nodes = data?.data?.productOfferV2?.nodes || [];
       return nodes[0]?.imageUrl || null;
     } catch (err) {
-      console.error('[Shopee] Erro imagem:', err.message);
+      console.error('[Shopee] Erro:', err.response?.data ? JSON.stringify(err.response.data) : err.message);
       return null;
     }
   }
