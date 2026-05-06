@@ -8,36 +8,41 @@ class ShopeeAPI {
     this.baseUrl = 'https://open-api.affiliate.shopee.com.br/graphql';
   }
 
-  _sign(timestamp) {
-    // Payload é: appId + timestamp (sem separador)
-    const payload = this.appId + timestamp;
-    console.log('[Shopee] Payload assinatura:', payload);
-    return crypto
-      .createHmac('sha256', this.secret)
-      .update(payload)
-      .digest('hex');
-  }
-
   async _query(gql) {
-    const timestamp = Math.floor(Date.now() / 1000).toString();
-    const signature = this._sign(timestamp);
+    // Testa os dois formatos de timestamp
+    const tsSeconds = Math.floor(Date.now() / 1000).toString();
+    const tsMillis  = Date.now().toString();
 
-    console.log('[Shopee] AppID usado:', this.appId);
-    console.log('[Shopee] Secret (primeiros 5):', this.secret.substring(0, 5) + '...');
-    console.log('[Shopee] Signature:', signature.substring(0, 20) + '...');
+    for (const timestamp of [tsSeconds, tsMillis]) {
+      const signature = crypto
+        .createHmac('sha256', this.secret)
+        .update(this.appId + timestamp)
+        .digest('hex');
 
-    const res = await axios.post(
-      this.baseUrl,
-      { query: gql },
-      {
-        headers: {
-          'Content-Type':  'application/json',
-          'Authorization': `SHA256 Credential=${this.appId},Timestamp=${timestamp},Signature=${signature}`,
-        },
-        timeout: 10000,
+      try {
+        const res = await axios.post(
+          this.baseUrl,
+          { query: gql },
+          {
+            headers: {
+              'Content-Type':  'application/json',
+              'Authorization': `SHA256 Credential=${this.appId},Timestamp=${timestamp},Signature=${signature}`,
+            },
+            timeout: 10000,
+          }
+        );
+
+        const data = res.data;
+        if (!data.errors) {
+          console.log('[Shopee] Autenticação ok com timestamp:', timestamp.length > 10 ? 'milissegundos' : 'segundos');
+          return data;
+        }
+        console.warn('[Shopee] Erro com timestamp', timestamp.length > 10 ? 'ms' : 's', ':', data.errors[0]?.message);
+      } catch(err) {
+        console.warn('[Shopee] Erro HTTP:', err.message);
       }
-    );
-    return res.data;
+    }
+    return null;
   }
 
   async getProductImage(itemId) {
@@ -49,11 +54,12 @@ class ShopeeAPI {
         }
       }`;
       const data = await this._query(gql);
-      console.log('[Shopee] Resposta:', JSON.stringify(data).substring(0, 300));
+      if (!data) return null;
+      console.log('[Shopee] Resposta imagem:', JSON.stringify(data).substring(0, 200));
       const nodes = data?.data?.productOfferV2?.nodes || [];
       return nodes[0]?.imageUrl || null;
     } catch (err) {
-      console.error('[Shopee] Erro imagem:', err.response?.data ? JSON.stringify(err.response.data) : err.message);
+      console.error('[Shopee] Erro imagem:', err.message);
       return null;
     }
   }
@@ -71,6 +77,7 @@ class ShopeeAPI {
       `;
       const data = await this._query(gql);
       const link = data?.data?.generateShortLink?.shortLink;
+      console.log('[Shopee] Link:', link || 'falhou');
       return link || originalUrl;
     } catch (err) {
       console.warn('[Shopee] Erro link:', err.message);
